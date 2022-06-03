@@ -50,8 +50,6 @@ class MDP:
 
         self.reward = reward or {s: 0 for s in self.states}
 
-        # self.check_consistency()
-
     def R(self, state):
         """Return a numeric reward for this state."""
 
@@ -245,10 +243,8 @@ def best_policy(mdp, U):
         pi[s] = max(mdp.actions(s), key=lambda a: q_value(mdp, s, a, U))
     return pi
 
-
 def expected_utility(a, s, U, mdp):
     """The expected utility of doing a in state s, according to the MDP and U."""
-
     return sum(p * U[s1] for (p, s1) in mdp.T(s, a))
 
 

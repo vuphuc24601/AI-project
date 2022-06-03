@@ -1,258 +1,51 @@
 """Reinforcement Learning (Chapter 21)"""
 
 import random
-from collections import defaultdict
+from collections import defaultdict,namedtuple, deque
 
 from mdp4e import MDP, policy_evaluation
 import numpy as np
 
-# _________________________________________
-# 21.2 Passive Reinforcement Learning
-# 21.2.1 Direct utility estimation
+class Replay_Buffer(object):
+    """Replay buffer to store past experiences that the agent can then use for training data"""
+    
+    def __init__(self, buffer_size, batch_size, seed=42):
 
+        self.memory = deque(maxlen=buffer_size)
+        self.batch_size = batch_size
+        self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state"])
+        random.seed(seed)
 
-class PassiveDUEAgent:
-    """
-    Passive (non-learning) agent that uses direct utility estimation
-    on a given MDP and policy.
+    def add_experience(self, states, actions, rewards, next_states):
+        """Adds experience(s) into the replay buffer"""
+        experience = self.experience(states, actions, rewards, next_states)
+        self.memory.append(experience)
 
-    import sys
-    from mdp import sequential_decision_environment
-    north = (0, 1)
-    south = (0,-1)
-    west = (-1, 0)
-    east = (1, 0)
-    policy = {(0, 2): east, (1, 2): east, (2, 2): east, (3, 2): None, (0, 1): north, (2, 1): north,
-              (3, 1): None, (0, 0): north, (1, 0): west, (2, 0): west, (3, 0): west,}
-    agent = PassiveDUEAgent(policy, sequential_decision_environment)
-    for i in range(200):
-        run_single_trial(agent,sequential_decision_environment)
-        agent.estimate_U()
-    agent.U[(0, 0)] > 0.2
-    True
-    """
+    def pick_experiences(self, num_experiences=None):
+        if num_experiences is not None: batch_size = num_experiences
+        else: batch_size = self.batch_size
+        return random.sample(self.memory, k=batch_size)
 
-    def __init__(self, pi, mdp):
-        self.pi = pi
-        self.mdp = mdp
-        self.U = {}
-        self.s = None
-        self.a = None
-        self.s_history = []
-        self.r_history = []
-        self.init = mdp.init
-
-    def __call__(self, percept):
-        s1, r1 = percept
-        self.s_history.append(s1)
-        self.r_history.append(r1)
-        ##
-        ##
-        if s1 in self.mdp.terminals:
-            self.s = self.a = None
-        else:
-            self.s, self.a = s1, self.pi[s1]
-        return self.a
-
-    def estimate_U(self):
-        # this function can be called only if the MDP has reached a terminal state
-        # it will also reset the mdp history
-        assert self.a is None, 'MDP is not in terminal state'
-        assert len(self.s_history) == len(self.r_history)
-        # calculating the utilities based on the current iteration
-        U2 = {s: [] for s in set(self.s_history)}
-        for i in range(len(self.s_history)):
-            s = self.s_history[i]
-            U2[s] += [sum(self.r_history[i:])]
-        U2 = {k: sum(v) / max(len(v), 1) for k, v in U2.items()}
-        # resetting history
-        self.s_history, self.r_history = [], []
-        # setting the new utilities to the average of the previous
-        # iteration and this one
-        for k in U2.keys():
-            if k in self.U.keys():
-                self.U[k] = (self.U[k] + U2[k]) / 2
-            else:
-                self.U[k] = U2[k]
-        return self.U
-
-    def update_state(self, percept):
-        """To be overridden in most cases. The default case
-        assumes the percept to be of type (state, reward)"""
-        return percept
-
-
-# 21.2.2 Adaptive dynamic programming
-
-
-class PassiveADPAgent:
-    """
-    [Figure 21.2]
-    Passive (non-learning) agent that uses adaptive dynamic programming
-    on a given MDP and policy.
-
-    import sys
-    from mdp import sequential_decision_environment
-    north = (0, 1)
-    south = (0,-1)
-    west = (-1, 0)
-    east = (1, 0)
-    policy = {(0, 2): east, (1, 2): east, (2, 2): east, (3, 2): None, (0, 1): north, (2, 1): north,
-              (3, 1): None, (0, 0): north, (1, 0): west, (2, 0): west, (3, 0): west,}
-    agent = PassiveADPAgent(policy, sequential_decision_environment)
-    for i in range(100):
-        run_single_trial(agent,sequential_decision_environment)
-
-    agent.U[(0, 0)] > 0.2
-    True
-    agent.U[(0, 1)] > 0.2
-    True
-    """
-
-    class ModelMDP(MDP):
-        """Class for implementing modified Version of input MDP with
-        an editable transition model P and a custom function T."""
-
-        def __init__(self, init, actlist, terminals, gamma, states):
-            super().__init__(init, actlist, terminals, states=states, gamma=gamma)
-            nested_dict = lambda: defaultdict(nested_dict)
-            # StackOverflow:whats-the-best-way-to-initialize-a-dict-of-dicts-in-python
-            self.P = nested_dict()
-
-        def T(self, s, a):
-            """Return a list of tuples with probabilities for states
-            based on the learnt model P."""
-            return [(prob, res) for (res, prob) in self.P[(s, a)].items()]
-
-    def __init__(self, pi, mdp):
-        self.pi = pi
-        self.mdp = PassiveADPAgent.ModelMDP(mdp.init, mdp.actlist,
-                                            mdp.terminals, mdp.gamma, mdp.states)
-        self.U = {}
-        self.Nsa = defaultdict(int)
-        self.Ns1_sa = defaultdict(int)
-        self.s = None
-        self.a = None
-        self.visited = set()  # keeping track of visited states
-
-    def __call__(self, percept):
-        s1, r1 = percept
-        mdp = self.mdp
-        R, P, terminals, pi = mdp.reward, mdp.P, mdp.terminals, self.pi
-        s, a, Nsa, Ns1_sa, U = self.s, self.a, self.Nsa, self.Ns1_sa, self.U
-
-        if s1 not in self.visited:  # Reward is only known for visited state.
-            U[s1] = R[s1] = r1
-            self.visited.add(s1)
-        if s is not None:
-            Nsa[(s, a)] += 1
-            Ns1_sa[(s1, s, a)] += 1
-            # for each t such that Ns′|sa [t, s, a] is nonzero
-            for t in [res for (res, state, act), freq in Ns1_sa.items()
-                      if (state, act) == (s, a) and freq != 0]:
-                P[(s, a)][t] = Ns1_sa[(t, s, a)] / Nsa[(s, a)]
-
-        self.U = policy_evaluation(pi, U, mdp)
-        ##
-        ##
-        self.Nsa, self.Ns1_sa = Nsa, Ns1_sa
-        if s1 in terminals:
-            self.s = self.a = None
-        else:
-            self.s, self.a = s1, self.pi[s1]
-        return self.a
-
-    def update_state(self, percept):
-        """To be overridden in most cases. The default case
-        assumes the percept to be of type (state, reward)."""
-        return percept
-
-
-# 21.2.3 Temporal-difference learning
-
-
-class PassiveTDAgent:
-    """
-    [Figure 21.4]
-    The abstract class for a Passive (non-learning) agent that uses
-    temporal differences to learn utility estimates. Override update_state
-    method to convert percept to state and reward. The mdp being provided
-    should be an instance of a subclass of the MDP Class.
-
-    import sys
-    from mdp import sequential_decision_environment
-    north = (0, 1)
-    south = (0,-1)
-    west = (-1, 0)
-    east = (1, 0)
-    policy = {(0, 2): east, (1, 2): east, (2, 2): east, (3, 2): None, (0, 1): north, (2, 1): north,
-              (3, 1): None, (0, 0): north, (1, 0): west, (2, 0): west, (3, 0): west,}
-    agent = PassiveTDAgent(policy, sequential_decision_environment, alpha=lambda n: 60./(59+n))
-    for i in range(200):
-        run_single_trial(agent,sequential_decision_environment)
-
-    agent.U[(0, 0)] > 0.2
-    True
-    agent.U[(0, 1)] > 0.2
-    True
-    """
-
-    def __init__(self, pi, mdp, alpha=None):
-
-        self.pi = pi
-        self.U = {s: 0. for s in mdp.states}
-        self.Ns = {s: 0 for s in mdp.states}
-        self.s = None
-        self.a = None
-        self.r = None
-        self.gamma = mdp.gamma
-        self.terminals = mdp.terminals
-
-        if alpha:
-            self.alpha = alpha
-        else:
-            self.alpha = lambda n: 1 / (1 + n)  # udacity video
-
-    def __call__(self, percept):
-        s1, r1 = self.update_state(percept)
-        pi, U, Ns, s, r = self.pi, self.U, self.Ns, self.s, self.r
-        alpha, gamma, terminals = self.alpha, self.gamma, self.terminals
-        if not Ns[s1]:
-            U[s1] = r1
-        if s is not None:
-            Ns[s] += 1
-            U[s] += alpha(Ns[s]) * (r + gamma * U[s1] - U[s])
-        if s1 in terminals:
-            self.s = self.a = self.r = None
-        else:
-            self.s, self.a, self.r = s1, pi[s1], r1
-        return self.a
-
-    def update_state(self, percept):
-        """To be overridden in most cases. The default case
-        assumes the percept to be of type (state, reward)."""
-        return percept
-
-
-# __________________________________________
-# 21.3. Active Reinforcement Learning
-# 21.3.2 Learning an action-utility function
-
+    def __len__(self):
+        return len(self.memory)
 
 class QLearningAgent:
 
-    def __init__(self, mdp, tau=None, Ne=None, Rplus=None, alpha=None, threshold=5000, B = 30, K = 100, M = 5000):
+    def __init__(self, mdp, epsilon_greedy=False, Ne=None, Rplus=None, alpha=None, no_of_episodes=10000, threshold=500, B = 30, K = 100, M = 5000):
 
         self.gamma = mdp.gamma
         self.terminals = mdp.terminals
         self.all_act = mdp.actlist
         self.Ne = Ne  # iteration limit in exploration function
         self.Rplus = Rplus  # large value to assign before iteration limit
-        self.tau = tau
+        self.epsilon_greedy = epsilon_greedy
         self.threshold = threshold
         self.B = B
         self.K = K
         self.M = M
+        self.episode_cnt = 0
+        self.threshold_cnt = 0
+        self.replay_buffer = Replay_Buffer(M, B)
 
         self.Q = defaultdict(float)
         self.Nsa = defaultdict(float)
@@ -260,7 +53,9 @@ class QLearningAgent:
         self.a = None
         self.r = None
         self.eps = None
-        self.cnt = None
+
+        if self.epsilon_greedy:
+            self.EPSILON_DELTA = 1 / no_of_episodes
 
         if alpha:
             self.alpha = alpha
@@ -286,7 +81,10 @@ class QLearningAgent:
 
     def init_new_episode(self):
         self.s = self.r = None
-        self.cnt = 0
+        self.threshold_cnt = 0
+        if self.epsilon_greedy:
+            self.eps = max(0, 1 - self.EPSILON_DELTA)
+        self.episode_cnt += 1
 
     def __call__(self, percept):
         s1, r1 = self.update_state(percept)
@@ -294,17 +92,18 @@ class QLearningAgent:
         alpha, gamma, terminals = self.alpha, self.gamma, self.terminals,
         actions_in_state = self.actions_in_state
         
-        if self.tau:
-            self.eps = float(np.exp(-self.cnt * self.tau)) 
-
-        self.cnt += 1
-
-        if s in terminals:
-            Q[s, None] = r
+        self.threshold_cnt += 1
+        
         if s is not None:
             Nsa[s, a] += 1
-            Q[s, a] += alpha(Nsa[s, a]) * (r1 + gamma * max(Q[s1, a1]
-                                                           for a1 in actions_in_state(s1)) - Q[s, a])
+            if self.episode_cnt <= self.K:
+                Q[s, a] += alpha(Nsa[s, a]) * (r1 + gamma * max(Q[s1, a1] for a1 in actions_in_state(s1)) - Q[s, a])
+            self.replay_buffer.add_experience(s, a, r1, s1)
+        if self.episode_cnt > self.K:
+            for (_s,_a,_r1,_s1) in self.replay_buffer.pick_experiences(min(len(self.replay_buffer), self.B)):
+                Nsa[_s, _a] += 1
+                Q[_s, _a] += alpha(Nsa[_s, _a]) * (_r1 + gamma * max(Q[_s1, a1] for a1 in actions_in_state(_s1)) - Q[_s, _a])
+
         if s in terminals:
             self.s = self.a = self.r = None
         if s1 in terminals:
@@ -315,9 +114,10 @@ class QLearningAgent:
                 if self.eps > np.random.uniform(0.0, 1.0):
                     self.a = actions_in_state(s1)[np.random.choice(4)]
                 else:
-                    self.a = max(actions_in_state(s1), key=lambda a1: Q[s1, a1])
+                    self.a = max(actions_in_state(s1), key= lambda a1: Q[s1, a1])
             elif self.Ne != None and self.Rplus != None:
                 self.a = max(actions_in_state(s1), key=lambda a1: self.f(Q[s1, a1], Nsa[s1, a1]))
+
         return self.a
 
     def update_state(self, percept):
@@ -326,7 +126,7 @@ class QLearningAgent:
         return percept
 
     def continue_current_episode(self):
-        return self.cnt < self.threshold
+        return self.threshold_cnt < self.threshold
 
 
 def run_single_trial(agent_program, mdp):
