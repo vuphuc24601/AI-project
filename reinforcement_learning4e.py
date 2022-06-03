@@ -306,10 +306,12 @@ class QLearningAgent:
         actions_in_state = self.actions_in_state
 
         if s in terminals:
-            Q[s, None] = r1
+            Q[s, None] = r
         if s is not None:
             Nsa[s, a] += 1
-            Q[s, a] += alpha(Nsa[s, a]) * (r + gamma * max(Q[s1, a1]
+            if s == (2 , 0) and a == (0, -1):
+                print("FUCK" , s , s1, r1)
+            Q[s, a] += alpha(Nsa[s, a]) * (r1 + gamma * max(Q[s1, a1]
                                                            for a1 in actions_in_state(s1)) - Q[s, a])
         if s in terminals:
             self.s = self.a = self.r = None
@@ -344,10 +346,16 @@ def run_single_trial(agent_program, mdp):
         return state
 
     current_state = mdp.init
+    print(mdp.R((0,2)))
+    cnt = 0
     while True:
         current_reward = mdp.R(current_state)
         percept = (current_state, current_reward)
         next_action = agent_program(percept)
+        cnt += 1
+        if cnt > 100:
+            print(current_state, next_action, agent_program.Q[current_state,next_action])
         if next_action is None:
+            agent_program.s = agent_program.r = None
             break
         current_state = take_single_action(mdp, current_state, next_action)

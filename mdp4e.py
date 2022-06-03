@@ -14,7 +14,7 @@ from collections import defaultdict
 import numpy as np
 
 from utils4e import vector_add, orientations, turn_right, turn_left
-
+from consts import *
 
 class MDP:
     """A Markov Decision Process, defined by an initial state, transition model,
@@ -196,15 +196,15 @@ A 4x3 grid environment that presents the agent with a sequential decision proble
 #                                            [-0.04, -0.04, None, -0.04]],
 #                                           terminals=[(3, 2), (3, 1)])
 
-sequential_decision_environment = GridMDP([[-0.04, -0.04, -0.04, -0.04, -0.04, -0.04, -0.04, 10],
-                                           [-0.04, -0.04, -1, -0.04, -0.04, -0.04, -0.04, -0.04],
-                                           [-0.04, -1, -10, -1, -0.04, -0.04, -0.04, -1],
-                                           [-0.04, -0.04, -1, -0.04, None, None, None, -10],
-                                           [-1, -0.04, -0.04, -0.04, -0.04, -1, -0.04, -1],
-                                           [-10, -1, -0.04, -0.04, -1, -10, -1, -0.04],
-                                           [-1, -0.04, -0.04, -0.04, -0.04, -1, -0.04, -0.04],
-                                           [-0.04, -0.04, -0.04, -0.04, -0.04, -0.04, -0.04, -0.04]],
-                                          terminals=[(7, 7),(0,2),(5,2),(3,5)])
+sequential_decision_environment = GridMDP([[OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, 10],
+                                           [OptionA, OptionA, -1, OptionA, OptionA, OptionA, OptionA, OptionA],
+                                           [OptionA, -1, -10, -1, OptionA, OptionA, OptionA, -1],
+                                           [OptionA, OptionA, -1, OptionA, None, None, None, -10],
+                                           [-1, OptionA, OptionA, OptionA, OptionA, -1, OptionA, -1],
+                                           [-10, -1, OptionA, OptionA, -1, -10, -1, OptionA],
+                                           [-1, OptionA, OptionA, OptionA, OptionA, -1, OptionA, OptionA],
+                                           [OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA]],
+                                          terminals=[(7, 7)])
 
 # ______________________________________________________________________________
 # 16.1.3 The Bellman equation for utilities
@@ -212,10 +212,10 @@ sequential_decision_environment = GridMDP([[-0.04, -0.04, -0.04, -0.04, -0.04, -
 
 def q_value(mdp, s, a, U):
     if not a:
-        return mdp.R(s)
+        return 0
     res = 0
     for p, s_prime in mdp.T(s, a):
-        res += p * (mdp.R(s) + mdp.gamma * U[s_prime])
+        res += p * (mdp.R(s_prime) + mdp.gamma * U[s_prime])
     return res
 
 
