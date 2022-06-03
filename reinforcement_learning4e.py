@@ -4,7 +4,7 @@ import random
 from collections import defaultdict
 
 from mdp4e import MDP, policy_evaluation
-
+import numpy as np
 
 # _________________________________________
 # 21.2 Passive Reinforcement Learning
@@ -240,42 +240,27 @@ class PassiveTDAgent:
 
 
 class QLearningAgent:
-    """
-    [Figure 21.8]
-    An exploratory Q-learning agent. It avoids having to learn the transition
-    model because the Q-value of a state can be related directly to those of
-    its neighbors.
 
-    import sys
-    from mdp import sequential_decision_environment
-    north = (0, 1)
-    south = (0,-1)
-    west = (-1, 0)
-    east = (1, 0)
-    policy = {(0, 2): east, (1, 2): east, (2, 2): east, (3, 2): None, (0, 1): north, (2, 1): north,
-              (3, 1): None, (0, 0): north, (1, 0): west, (2, 0): west, (3, 0): west,}
-    q_agent = QLearningAgent(sequential_decision_environment, Ne=5, Rplus=2, alpha=lambda n: 60./(59+n))
-    for i in range(200):
-        run_single_trial(q_agent,sequential_decision_environment)
-
-    q_agent.Q[((0, 1), (0, 1))] >= -0.5
-    True
-    q_agent.Q[((1, 0), (0, -1))] <= 0.5
-    True
-    """
-
-    def __init__(self, mdp, Ne, Rplus, alpha=None):
+    def __init__(self, mdp, tau=None, Ne=None, Rplus=None, alpha=None, threshold=5000, B = 30, K = 100, M = 5000):
 
         self.gamma = mdp.gamma
         self.terminals = mdp.terminals
         self.all_act = mdp.actlist
         self.Ne = Ne  # iteration limit in exploration function
         self.Rplus = Rplus  # large value to assign before iteration limit
+        self.tau = tau
+        self.threshold = threshold
+        self.B = B
+        self.K = K
+        self.M = M
+
         self.Q = defaultdict(float)
         self.Nsa = defaultdict(float)
         self.s = None
         self.a = None
         self.r = None
+        self.eps = None
+        self.cnt = None
 
         if alpha:
             self.alpha = alpha
@@ -299,31 +284,49 @@ class QLearningAgent:
         else:
             return self.all_act
 
+    def init_new_episode(self):
+        self.s = self.r = None
+        self.cnt = 0
+
     def __call__(self, percept):
         s1, r1 = self.update_state(percept)
         Q, Nsa, s, a, r = self.Q, self.Nsa, self.s, self.a, self.r
         alpha, gamma, terminals = self.alpha, self.gamma, self.terminals,
         actions_in_state = self.actions_in_state
+        
+        if self.tau:
+            self.eps = float(np.exp(-self.cnt * self.tau)) 
+
+        self.cnt += 1
 
         if s in terminals:
             Q[s, None] = r
         if s is not None:
             Nsa[s, a] += 1
-            if s == (2 , 0) and a == (0, -1):
-                print("FUCK" , s , s1, r1)
             Q[s, a] += alpha(Nsa[s, a]) * (r1 + gamma * max(Q[s1, a1]
                                                            for a1 in actions_in_state(s1)) - Q[s, a])
         if s in terminals:
             self.s = self.a = self.r = None
+        if s1 in terminals:
+            return None
         else:
             self.s, self.r = s1, r1
-            self.a = max(actions_in_state(s1), key=lambda a1: self.f(Q[s1, a1], Nsa[s1, a1]))
+            if self.eps != None:
+                if self.eps > np.random.uniform(0.0, 1.0):
+                    self.a = actions_in_state(s1)[np.random.choice(4)]
+                else:
+                    self.a = max(actions_in_state(s1), key=lambda a1: Q[s1, a1])
+            elif self.Ne != None and self.Rplus != None:
+                self.a = max(actions_in_state(s1), key=lambda a1: self.f(Q[s1, a1], Nsa[s1, a1]))
         return self.a
 
     def update_state(self, percept):
         """To be overridden in most cases. The default case
         assumes the percept to be of type (state, reward)."""
         return percept
+
+    def continue_current_episode(self):
+        return self.cnt < self.threshold
 
 
 def run_single_trial(agent_program, mdp):
@@ -344,18 +347,12 @@ def run_single_trial(agent_program, mdp):
             if x < cumulative_probability:
                 break
         return state
-
+    agent_program.init_new_episode()
     current_state = mdp.init
-    print(mdp.R((0,2)))
-    cnt = 0
-    while True:
+    while agent_program.continue_current_episode():
         current_reward = mdp.R(current_state)
         percept = (current_state, current_reward)
         next_action = agent_program(percept)
-        cnt += 1
-        if cnt > 100:
-            print(current_state, next_action, agent_program.Q[current_state,next_action])
         if next_action is None:
-            agent_program.s = agent_program.r = None
             break
         current_state = take_single_action(mdp, current_state, next_action)

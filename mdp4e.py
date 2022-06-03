@@ -14,7 +14,6 @@ from collections import defaultdict
 import numpy as np
 
 from utils4e import vector_add, orientations, turn_right, turn_left
-from consts import *
 
 class MDP:
     """A Markov Decision Process, defined by an initial state, transition model,
@@ -195,16 +194,6 @@ A 4x3 grid environment that presents the agent with a sequential decision proble
 #                                            [-0.04, None, -0.04, -1],
 #                                            [-0.04, -0.04, None, -0.04]],
 #                                           terminals=[(3, 2), (3, 1)])
-
-sequential_decision_environment = GridMDP([[OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, 10],
-                                           [OptionA, OptionA, -1, OptionA, OptionA, OptionA, OptionA, OptionA],
-                                           [OptionA, -1, -10, -1, OptionA, OptionA, OptionA, -1],
-                                           [OptionA, OptionA, -1, OptionA, None, None, None, -10],
-                                           [-1, OptionA, OptionA, OptionA, OptionA, -1, OptionA, -1],
-                                           [-10, -1, OptionA, OptionA, -1, -10, -1, OptionA],
-                                           [-1, OptionA, OptionA, OptionA, OptionA, -1, OptionA, OptionA],
-                                           [OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA, OptionA]],
-                                          terminals=[(7, 7)])
 
 # ______________________________________________________________________________
 # 16.1.3 The Bellman equation for utilities
