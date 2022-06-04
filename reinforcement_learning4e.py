@@ -31,7 +31,8 @@ class Replay_Buffer(object):
 
 class QLearningAgent:
 
-    def __init__(self, mdp, epsilon_greedy=False, Ne=None, Rplus=None, alpha=None, no_of_episodes=10000, threshold=500, B = 30, K = 100, M = 5000):
+    def __init__(self, mdp, epsilon_greedy=False,experience_replay=False, Ne=None, Rplus=None, alpha=None, 
+                no_of_episodes=10000, threshold=500, B = 30, K = 100, M = 5000):
 
         self.gamma = mdp.gamma
         self.terminals = mdp.terminals
@@ -39,13 +40,15 @@ class QLearningAgent:
         self.Ne = Ne  # iteration limit in exploration function
         self.Rplus = Rplus  # large value to assign before iteration limit
         self.epsilon_greedy = epsilon_greedy
+        self.experience_replay = experience_replay
         self.threshold = threshold
         self.B = B
         self.K = K
         self.M = M
         self.episode_cnt = 0
         self.threshold_cnt = 0
-        self.replay_buffer = Replay_Buffer(M, B)
+        if experience_replay:
+            self.replay_buffer = Replay_Buffer(M, B)
 
         self.Q = defaultdict(float)
         self.Nsa = defaultdict(float)
@@ -96,10 +99,11 @@ class QLearningAgent:
         
         if s is not None:
             Nsa[s, a] += 1
-            if self.episode_cnt <= self.K:
+            if self.episode_cnt <= self.K or self.experience_replay == False:
                 Q[s, a] += alpha(Nsa[s, a]) * (r1 + gamma * max(Q[s1, a1] for a1 in actions_in_state(s1)) - Q[s, a])
-            self.replay_buffer.add_experience(s, a, r1, s1)
-        if self.episode_cnt > self.K:
+            if self.experience_replay:
+                self.replay_buffer.add_experience(s, a, r1, s1)
+        if self.experience_replay and self.episode_cnt > self.K:
             for (_s,_a,_r1,_s1) in self.replay_buffer.pick_experiences(min(len(self.replay_buffer), self.B)):
                 Nsa[_s, _a] += 1
                 Q[_s, _a] += alpha(Nsa[_s, _a]) * (_r1 + gamma * max(Q[_s1, a1] for a1 in actions_in_state(_s1)) - Q[_s, _a])
@@ -110,7 +114,7 @@ class QLearningAgent:
             return None
         else:
             self.s, self.r = s1, r1
-            if self.eps != None:
+            if self.epsilon_greedy:
                 if self.eps > np.random.uniform(0.0, 1.0):
                     self.a = actions_in_state(s1)[np.random.choice(4)]
                 else:
